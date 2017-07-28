@@ -67,7 +67,7 @@ ACE_Handle_Set::is_set (ACE_HANDLE handle) const
   ACE_TRACE ("ACE_Handle_Set::is_set");
 #if defined (ACE_HAS_BIG_FD_SET)
   return FD_ISSET (handle,
-                   &this->mask_)
+                   const_cast<fd_set*>(&this->mask_))
     && this->size_ > 0;
 #elif defined (ACE_HAS_NONCONST_FD_ISSET)
   return FD_ISSET (handle,
