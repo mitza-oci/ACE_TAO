@@ -23,6 +23,8 @@
 #include "ace/Basic_Types.h"
 #include "ace/os_include/netinet/os_in.h"
 
+#include <string>
+
 ACE_BEGIN_VERSIONED_NAMESPACE_DECL
 
 // Forward Declarations
@@ -60,9 +62,13 @@ namespace ACE
    * Return count and array of all configured IP interfaces on this
    * host, rc = 0 on success (count == number of interfaces else -1).
    * Caller is responsible for calling delete [] on @a addr_array.
+   * If @a name_array is not nullptr, then when this function returns successfully
+   * *name_array is either nullptr or a dynamically allocated array of @a count
+   * strings and the caller is responsible for calling delete [] on it.
    */
   extern ACE_Export int get_ip_interfaces (size_t &count,
-                                           ACE_INET_Addr *&addr_array);
+                                           ACE_INET_Addr *&addr_array,
+                                           std::string **name_array = nullptr);
 
   /**
    * Helper routine for get_ip_interfaces, differs by UNIX platform so

@@ -649,10 +649,10 @@ ACE_SOCK_Dgram::make_multicast_ifaddr (ip_mreq *ret_mreq,
   ip_mreq  lmreq;       // Scratch copy.
   if (net_if != 0)
     {
-      const char * net_if_char = ACE_TEXT_ALWAYS_CHAR (net_if);
-      if (ACE_OS::strstr (net_if_char, "if=") != 0)
+      const char *net_if_char = ACE_TEXT_ALWAYS_CHAR (net_if);
+      if (ACE_OS::strncmp (net_if_char, "if=", 3) == 0)
         {
-          net_if_char = net_if_char + 3;
+          net_if_char += 3;
         }
 
 #if defined (ACE_WIN32)
@@ -708,7 +708,7 @@ ACE_SOCK_Dgram::make_multicast_ifaddr (ip_mreq *ret_mreq,
         ACE_HTONL (interface_addr.get_ip_address ());
 #else
       ifreq if_address;
-      ACE_OS::strsncpy (if_address.ifr_name, net_if_char, (sizeof if_address.ifr_name));
+      ACE_OS::strsncpy (if_address.ifr_name, net_if_char, sizeof if_address.ifr_name);
       if (ACE_OS::ioctl (this->get_handle (),
                          SIOCGIFADDR,
                          &if_address) == -1)
@@ -761,13 +761,13 @@ ACE_SOCK_Dgram::make_multicast_ifaddr6 (ipv6_mreq *ret_mreq,
 #if defined (ACE_WIN32) || !defined (ACE_LACKS_IF_NAMETOINDEX)
   if (net_if != 0)
     {
-      const char * net_if_char = ACE_TEXT_ALWAYS_CHAR (net_if);
+      const char *net_if_char = ACE_TEXT_ALWAYS_CHAR (net_if);
 
-      struct in6_addr net_if_in6_addr;
-      bool net_if_is_ip_address ( false );
-      if (ACE_OS::strstr (net_if_char, "if=") != 0)
+      in6_addr net_if_in6_addr{};
+      bool net_if_is_ip_address (false);
+      if (ACE_OS::strncmp (net_if_char, "if=", 3) == 0)
         {
-          net_if_char = net_if_char + 3;
+          net_if_char += 3;
         }
       else
         {
@@ -817,11 +817,8 @@ ACE_SOCK_Dgram::make_multicast_ifaddr6 (ipv6_mreq *ret_mreq,
               IP_ADAPTER_UNICAST_ADDRESS *uni = 0;
               for (uni = pAddrs->FirstUnicastAddress; uni != 0; uni = uni->Next)
                 {
-                  struct sockaddr_in6 *sin = reinterpret_cast <sockaddr_in6 *> (uni->Address.lpSockaddr);
-                  if (std::memcmp (
-                       reinterpret_cast <void *> (&net_if_in6_addr),
-                       reinterpret_cast <void *> (&sin->sin6_addr),
-                       sizeof (in6_addr)) == 0)
+                  sockaddr_in6 *sin = reinterpret_cast<sockaddr_in6 *> (uni->Address.lpSockaddr);
+                  if (std::memcmp (&net_if_in6_addr, &sin->sin6_addr, sizeof (in6_addr)) == 0)
                     {
                       lmreq.ipv6mr_interface = pAddrs->Ipv6IfIndex;
                       break;
@@ -832,7 +829,7 @@ ACE_SOCK_Dgram::make_multicast_ifaddr6 (ipv6_mreq *ret_mreq,
                   break;
                 }
             }
-          else if ((num_if && pAddrs->Ipv6IfIndex == static_cast<unsigned int>(if_ix))
+          else if ((num_if && pAddrs->Ipv6IfIndex == static_cast<unsigned int> (if_ix))
                    || (!num_if &&
                        (ACE_OS::strcmp (net_if_char, pAddrs->AdapterName) == 0
                         || ACE_OS::strcmp (ACE_Ascii_To_Wide (net_if_char).wchar_rep (), pAddrs->FriendlyName) == 0)))
@@ -857,18 +854,19 @@ ACE_SOCK_Dgram::make_multicast_ifaddr6 (ipv6_mreq *ret_mreq,
           if (net_if_is_ip_address)
             {
               // net_if is an IP(v6) address, so find the interface name and *then* convert it to an interface index
-              ACE_INET_Addr *if_addrs = 0;
+              ACE_INET_Addr *if_addrs = nullptr;
+              std::string *name_array = nullptr;
               size_t if_cnt;
-              if (ACE::get_ip_interfaces (if_cnt, if_addrs) == 0)
+              if (ACE::get_ip_interfaces (if_cnt, if_addrs, &name_array) == 0)
                 {
-                  struct sockaddr_in6 net_if_sockaddr_in6;
+                  sockaddr_in6 net_if_sockaddr_in6;
                   net_if_sockaddr_in6.sin6_family = AF_INET6;
                   net_if_sockaddr_in6.sin6_addr = net_if_in6_addr;
                   net_if_sockaddr_in6.sin6_port = 0;
                   net_if_sockaddr_in6.sin6_flowinfo = 0;
                   ACE_INET_Addr net_if_ace_inet_addr (
-                    reinterpret_cast<struct sockaddr_in *> (&net_if_sockaddr_in6),
-                    sizeof(sockaddr_in6));
+                    reinterpret_cast<sockaddr_in *> (&net_if_sockaddr_in6),
+                    sizeof (sockaddr_in6));
 
                   while (if_cnt > 0)
                     {
@@ -877,16 +875,17 @@ ACE_SOCK_Dgram::make_multicast_ifaddr6 (ipv6_mreq *ret_mreq,
 
                       if (net_if_ace_inet_addr.is_ip_equal (if_addrs[if_cnt]))
                         {
-                          auto if_name = if_addrs[if_cnt].get_interface_name ();
+                          auto const if_name = name_array ? name_array[if_cnt].c_str () : nullptr;
                           if (if_name)
                             {
-                              lmreq.ipv6mr_interface = ACE_OS::if_nametoindex (if_name->c_str ());
+                              lmreq.ipv6mr_interface = ACE_OS::if_nametoindex (if_name);
                             }
                           break;
                         }
                     }
                 }
               delete [] if_addrs;
+              delete [] name_array;
             }
 
           if (lmreq.ipv6mr_interface == 0)

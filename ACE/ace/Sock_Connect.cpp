@@ -558,7 +558,8 @@ get_ip_interfaces_win32 (size_t &count,
 #elif defined (ACE_HAS_GETIFADDRS)
 static int
 get_ip_interfaces_getifaddrs (size_t &count,
-                              ACE_INET_Addr *&addrs)
+                              ACE_INET_Addr *&addrs,
+                              std::string **name_array)
 {
   // Take advantage of the BSD getifaddrs function that simplifies
   // access to connected interfaces.
@@ -573,10 +574,15 @@ get_ip_interfaces_getifaddrs (size_t &count,
   for (p_if = ifap; p_if != 0; p_if = p_if->ifa_next)
     ++num_ifs;
 
-  // Now create and initialize output array.
+  // Now create and initialize output arrays.
   ACE_NEW_RETURN (addrs,
                   ACE_INET_Addr[num_ifs],
                   -1); // caller must free
+
+  if (name_array)
+    ACE_NEW_RETURN (*name_array,
+                    std::string[num_ifs],
+                    -1); // caller must free
 
   // Pull the address out of each INET interface.  Not every interface
   // is for IP, so be careful to count properly.  When setting the
@@ -607,7 +613,8 @@ get_ip_interfaces_getifaddrs (size_t &count,
               addrs[count].set ((u_short) 0,
                                 addr->sin_addr.s_addr,
                                 0);
-              addrs[count].set_interface_name (p_if->ifa_name);
+              if (name_array)
+                (*name_array)[count] = p_if->ifa_name;
               ++count;
             }
         }
@@ -622,7 +629,8 @@ get_ip_interfaces_getifaddrs (size_t &count,
             {
               addrs[count].set (reinterpret_cast<struct sockaddr_in *> (addr),
                                 sizeof(sockaddr_in6));
-              addrs[count].set_interface_name (p_if->ifa_name);
+              if (name_array)
+                (*name_array)[count] = p_if->ifa_name;
               ++count;
             }
         }
@@ -641,17 +649,21 @@ get_ip_interfaces_getifaddrs (size_t &count,
 // responsible for calling delete [] on parray
 
 int
-ACE::get_ip_interfaces (size_t &count, ACE_INET_Addr *&addrs)
+ACE::get_ip_interfaces (size_t &count, ACE_INET_Addr *&addrs,
+                        std::string **name_array)
 {
   ACE_TRACE ("ACE::get_ip_interfaces");
 
   count = 0;
   addrs = 0;
 
+  if (name_array)
+    *name_array = nullptr;
+
 #if defined (ACE_WIN32)
   return get_ip_interfaces_win32 (count, addrs);
 #elif defined (ACE_HAS_GETIFADDRS)
-  return get_ip_interfaces_getifaddrs (count, addrs);
+  return get_ip_interfaces_getifaddrs (count, addrs, name_array);
 #elif (defined (__unix) || defined (__unix__) || (defined (ACE_VXWORKS) && !defined (ACE_HAS_GETIFADDRS))) && !defined (ACE_LACKS_NETWORKING)
   // COMMON (SVR4 and BSD) UNIX CODE
 
